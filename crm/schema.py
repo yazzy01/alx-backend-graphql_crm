@@ -171,6 +171,49 @@ class CreateOrder(graphene.Mutation):
         return CreateOrder(order=order)
 
 
+class UpdateLowStockProducts(graphene.Mutation):
+    success = graphene.Boolean()
+    message = graphene.String()
+    count = graphene.Int()
+    updated_products = graphene.List(ProductType)
+
+    def mutate(self, info):
+        try:
+            # Query products with stock < 10
+            low_stock_products = Product.objects.filter(stock__lt=10)
+            
+            # If no products need updating
+            if not low_stock_products.exists():
+                return UpdateLowStockProducts(
+                    success=True,
+                    message="No low stock products found that need updating.",
+                    count=0,
+                    updated_products=[]
+                )
+            
+            # Update each product's stock by adding 10
+            updated_products = []
+            for product in low_stock_products:
+                product.stock += 10
+                product.save()
+                updated_products.append(product)
+            
+            return UpdateLowStockProducts(
+                success=True,
+                message=f"Successfully updated {len(updated_products)} products with low stock.",
+                count=len(updated_products),
+                updated_products=updated_products
+            )
+        
+        except Exception as e:
+            return UpdateLowStockProducts(
+                success=False,
+                message=f"Error updating low stock products: {str(e)}",
+                count=0,
+                updated_products=[]
+            )
+
+
 # ==============================
 # Main Mutation & Query classes
 # ==============================
@@ -180,6 +223,7 @@ class Mutation(graphene.ObjectType):
     bulk_create_customers = BulkCreateCustomers.Field()
     create_product = CreateProduct.Field()
     create_order = CreateOrder.Field()
+    update_low_stock_products = UpdateLowStockProducts.Field()
 
 
 class Query(graphene.ObjectType):
@@ -187,6 +231,10 @@ class Query(graphene.ObjectType):
     all_customers = DjangoFilterConnectionField(CustomerType, filterset_class=CustomerFilter)
     all_products = DjangoFilterConnectionField(ProductType, filterset_class=ProductFilter)
     all_orders = DjangoFilterConnectionField(OrderType, filterset_class=OrderFilter)
+    low_stock_products = graphene.List(ProductType)
 
     def resolve_hello(self, info):
         return "Hello, GraphQL!"
+    
+    def resolve_low_stock_products(self, info):
+        return Product.objects.filter(stock__lt=10)
